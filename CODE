@@ -1,1 +1,163 @@
+import java.util.*;
+
+class Challan {
+    String challanId;
+    String vehicleNo;
+    String violationCode;
+    String location;
+    int fineAmount;
+    String time;
+    String status;
+
+    Challan(String challanId, String vehicleNo, String violationCode, String location, int fineAmount, String time) {
+        this.challanId = challanId;
+        this.vehicleNo = vehicleNo;
+        this.violationCode = violationCode;
+        this.location = location;
+        this.fineAmount = fineAmount;
+        this.time = time;
+        this.status = "Unpaid";
+    }
+
+    @Override
+    public String toString() {
+        return "\nChallan ID: " + challanId +
+               "\nVehicle No: " + vehicleNo +
+               "\nViolation: " + violationCode +
+               "\nLocation: " + location +
+               "\nFine Amount: Rs. " + fineAmount +
+               "\nTime: " + time +
+               "\nStatus: " + status + "\n";
+    }
+}
+
+public class Main {
+
+    static HashMap<String, Integer> violationRules = new HashMap<>();
+    static ArrayList<Challan> challanDB = new ArrayList<>();
+    static Scanner sc = new Scanner(System.in);
+
+    // Generate Challan ID
+    public static String generateChallanId() {
+        return "CHL-" + (int)(Math.random() * 90000 + 10000);
+    }
+
+    // Create Challan
+    public static Challan createChallan(String vehicleNo, String vCode, String location) {
+        if (!violationRules.containsKey(vCode)) {
+            System.out.println("Invalid Violation Code!");
+            return null;
+        }
+
+        String id = generateChallanId();
+        int fine = violationRules.get(vCode);
+        String time = new Date().toString();
+
+        Challan ch = new Challan(id, vehicleNo, vCode, location, fine, time);
+        challanDB.add(ch);
+
+        return ch;
+    }
+
+    // Search Challan
+    public static Challan searchChallan(String cid) {
+        for (Challan c : challanDB) {
+            if (c.challanId.equals(cid)) return c;
+        }
+        return null;
+    }
+
+    // Pay Challan
+    public static void payChallan(String cid) {
+        Challan c = searchChallan(cid);
+        if (c == null) {
+            System.out.println("Challan Not Found!");
+            return;
+        }
+        if (c.status.equals("Paid")) {
+            System.out.println("Challan Already Paid!");
+            return;
+        }
+        c.status = "Paid";
+        System.out.println("Payment Successful!");
+    }
+
+    // Main Menu
+    public static void main(String[] args) {
+
+        // Predefined violation rules
+        violationRules.put("HL", 500);
+        violationRules.put("OS", 1000);
+        violationRules.put("SP", 750);
+        violationRules.put("PK", 300);
+        violationRules.put("DL", 1500);
+
+        while (true) {
+            System.out.println("\n===== E-CHALLAN SYSTEM =====");
+            System.out.println("1. Generate New Challan");
+            System.out.println("2. Search Challan");
+            System.out.println("3. Pay Challan");
+            System.out.println("4. View All Challans");
+            System.out.println("5. Exit");
+            System.out.print("Enter choice: ");
+
+            int choice = sc.nextInt();
+            sc.nextLine(); // clear buffer
+
+            switch (choice) {
+
+                case 1:
+                    System.out.print("Enter Vehicle Number: ");
+                    String vno = sc.nextLine();
+                    
+                    System.out.println("\nViolation Codes:");
+                    System.out.println("HL - No Helmet");
+                    System.out.println("OS - Over Speeding");
+                    System.out.println("SP - Signal Jump");
+                    System.out.println("PK - Wrong Parking");
+                    System.out.println("DL - No License");
+                    
+                    System.out.print("Enter Violation Code: ");
+                    String vcode = sc.nextLine();
+
+                    System.out.print("Enter Location: ");
+                    String loc = sc.nextLine();
+
+                    Challan c = createChallan(vno, vcode, loc);
+                    if (c != null) {
+                        System.out.println("\nChallan Generated:");
+                        System.out.println(c);
+                    }
+                    break;
+
+                case 2:
+                    System.out.print("Enter Challan ID: ");
+                    String cid = sc.nextLine();
+                    Challan found = searchChallan(cid);
+                    System.out.println(found != null ? found : "Challan Not Found!");
+                    break;
+
+                case 3:
+                    System.out.print("Enter Challan ID to Pay: ");
+                    String pid = sc.nextLine();
+                    payChallan(pid);
+                    break;
+
+                case 4:
+                    System.out.println("\n--- All Challans ---");
+                    for (Challan cc : challanDB) {
+                        System.out.println(cc);
+                    }
+                    break;
+
+                case 5:
+                    System.out.println("Exiting...");
+                    return;
+
+                default:
+                    System.out.println("Invalid Choice!");
+            }
+        }
+    }
+}
 
