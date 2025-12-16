@@ -1,0 +1,462 @@
+//only using html 
+
+//app.js
+// E-Challan static app using localStorage (final with QR)
+const presetUsers = [
+  {username:'officer1', password:'pass1', role:'officer', name:'Officer One'},
+  {username:'officer2', password:'pass2', role:'officer', name:'Officer Two'},
+  {username:'admin', password:'adminpass', role:'admin', name:'Administrator'}
+];
+
+const defaultRules = [
+  {id:'NO_HELMET', name:'No Helmet', fine:500},
+  {id:'SPEEDING', name:'Overspeeding', fine:1200},
+  {id:'SIGNAL_JUMP', name:'Signal Jump', fine:1500},
+  {id:'PARKING', name:'Illegal Parking', fine:300},
+];
+
+function uid(){ return 'CH'+Date.now().toString(36).toUpperCase().slice(-8); }
+
+function qs(id){ return document.getElementById(id); }
+
+let currentUser = null;
+let rules = JSON.parse(localStorage.getItem('rules')) || defaultRules.slice();
+if(!localStorage.getItem('rules')) localStorage.setItem('rules', JSON.stringify(rules));
+let records = JSON.parse(localStorage.getItem('records') || '[]');
+
+function saveAll(){ localStorage.setItem('rules', JSON.stringify(rules)); localStorage.setItem('records', JSON.stringify(records)); }
+
+function populateRulesSelect(){
+  const sel = qs('violationType');
+  sel.innerHTML = '';
+  rules.forEach(r=>{
+    const opt = document.createElement('option');
+    opt.value = r.id; opt.textContent = r.name + ' — ₹' + r.fine;
+    sel.appendChild(opt);
+  });
+  renderRuleList();
+}
+
+function renderRuleList(){
+  const ul = qs('ruleList');
+  ul.innerHTML = '';
+  rules.forEach(r=>{
+    const li = document.createElement('li');
+    li.textContent = `${r.name} (₹${r.fine}) `;
+    const del = document.createElement('button');
+    del.textContent='Delete'; del.style.background='#ef4444';
+    del.onclick = ()=>{
+      if(!confirm('Delete rule?')) return;
+      rules = rules.filter(x=>x.id !== r.id);
+      saveAll(); populateRulesSelect();
+    };
+    li.appendChild(del);
+    ul.appendChild(li);
+  });
+}
+
+function renderRecords(list){
+  const node = qs('records');
+  node.innerHTML = '';
+  if(list.length === 0){ node.innerHTML = '<small>No records found.</small>'; return; }
+  list.slice().reverse().forEach(r=>{
+    const div = document.createElement('div'); div.className='record';
+    const left = document.createElement('div');
+    left.innerHTML = `<div class="challan-id">${r.challanId} ${r.paid?'<small style="color:green">[PAID]</small>':''}</div><small>${r.vehicle} • ${r.violationName} • ₹${r.fine}</small>`;
+    const right = document.createElement('div');
+    const view = document.createElement('button'); view.textContent='View'; view.onclick=()=> showChallan(r);
+    const del = document.createElement('button'); del.textContent='Delete'; del.style.background='#ef4444';
+    del.onclick=()=>{
+      if(confirm('Delete this challan?')){ records = records.filter(x=>x.challanId !== r.challanId); saveAll(); renderRecords(records); }
+    };
+    right.appendChild(view); right.appendChild(del);
+    div.appendChild(left); div.appendChild(right);
+    node.appendChild(div);
+  });
+}
+
+function generateQRCodeForData(data, size=140){
+  // QRious must be loaded from CDN (index.html). If missing, skip.
+  try{
+    const qr = new QRious({value: data, size: size});
+    return qr.toDataURL();
+  }catch(e){
+    return null;
+  }
+}
+
+function showChallan(r){
+  qs('printSection').style.display='block';
+  const card = qs('challanCard');
+  const qrData = JSON.stringify({id:r.challanId, vehicle:r.vehicle, fine:r.fine, paid:r.paid, date:r.datetime});
+  const qrImg = generateQRCodeForData(qrData);
+  const qrHtml = qrImg? `<div class="qr-wrap"><img src="${qrImg}" alt="QR code"></div>` : '';
+  card.innerHTML = `
+    <h3>E-Challan</h3>
+    <p><strong>Challan ID:</strong> ${r.challanId} ${r.paid?'<small style="color:green">[PAID]</small>':''}</p>
+    <p><strong>Vehicle:</strong> ${r.vehicle}</p>
+    <p><strong>Violation:</strong> ${r.violationName} (₹${r.fine})</p>
+    <p><strong>Location:</strong> ${r.location || '-'}</p>
+    <p><strong>Date & Time:</strong> ${new Date(r.datetime).toLocaleString()}</p>
+    <p><strong>Issued By:</strong> ${r.officerName}</p>
+    ${qrHtml}
+    <div style="margin-top:12px"><button onclick="window.print()">Print Challan</button></div>
+  `;
+}
+
+function addRecord(data){
+  const cutoff = Date.now() - (2*60*1000);
+  const dup = records.find(x=> x.vehicle.toLowerCase()===data.vehicle.toLowerCase() && x.violationId===data.violationId && new Date(x.datetime).getTime() >= cutoff);
+  if(dup){
+    alert('Possible duplicate detected: a similar violation for this vehicle was issued recently. Aborting.');
+    return false;
+  }
+  data.paid = data.paid || false;
+  records.push(data); saveAll(); renderRecords(records);
+  return true;
+}
+
+function exportCSV(){
+  if(records.length===0){ alert('No records to export'); return; }
+  const header = ['ChallanID,Vehicle,Violation, Fine, Location, DateTime, Officer, Paid'];
+  const rows = records.map(r=> [r.challanId, r.vehicle, r.violationName, r.fine, r.location || '', new Date(r.datetime).toISOString(), r.officerName, r.paid? 'YES':'NO'].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(','));
+  const csv = header.concat(rows).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'e_challan_records.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  populateRulesSelect();
+  renderRecords(records);
+  qs('datetime').value = new Date().toISOString().slice(0,16);
+
+  qs('loginBtn').onclick = ()=>{
+    const u = qs('username').value.trim(), p = qs('password').value;
+    const user = presetUsers.find(x=> x.username===u && x.password===p);
+    if(!user){ alert('Invalid credentials'); return; }
+    currentUser = user; qs('loginSection').style.display='none'; qs('controls').style.display='block';
+    qs('logoutBtn').style.display='inline-block'; qs('loginBtn').style.display='none';
+    qs('userInfo').textContent = `Signed in: ${user.name} (${user.role})`;
+    if(user.role==='admin') qs('adminPanel').style.display='block';
+  };
+
+  qs('logoutBtn').onclick = ()=>{
+    currentUser = null; qs('loginSection').style.display='block'; qs('controls').style.display='none';
+    qs('logoutBtn').style.display='none'; qs('loginBtn').style.display='inline-block';
+    qs('userInfo').textContent = '';
+  };
+
+  qs('violationForm').onsubmit = e=>{
+    e.preventDefault();
+    if(!currentUser){ alert('Please login'); return; }
+    const vehicle = qs('vehicle').value.trim().toUpperCase();
+    const violationId = qs('violationType').value;
+    const violation = rules.find(r=>r.id===violationId);
+    const data = {
+      challanId: uid(),
+      vehicle,
+      violationId,
+      violationName: violation.name,
+      fine: violation.fine,
+      location: qs('location').value.trim(),
+      datetime: qs('datetime').value ? new Date(qs('datetime').value).toISOString() : new Date().toISOString(),
+      officerName: currentUser.name,
+      paid: false
+    };
+    const ok = addRecord(data);
+    if(ok){ showChallan(data); alert('Challan generated: ' + data.challanId); qs('violationForm').reset(); qs('datetime').value = new Date().toISOString().slice(0,16); }
+  };
+
+  qs('clearForm').onclick = ()=> qs('violationForm').reset();
+
+  qs('searchBtn').onclick = ()=>{
+    const q = qs('searchInput').value.trim().toLowerCase();
+    if(!q){ renderRecords(records); return; }
+    const out = records.filter(r=> r.vehicle.toLowerCase().includes(q) || r.challanId.toLowerCase().includes(q));
+    renderRecords(out);
+  };
+  qs('showAllBtn').onclick = ()=> renderRecords(records);
+  qs('exportCsvBtn').onclick = exportCSV;
+
+  qs('ruleForm').onsubmit = e=>{
+    e.preventDefault();
+    if(!currentUser || currentUser.role !== 'admin'){ alert('Only admin can edit rules'); return; }
+    const name = qs('ruleName').value.trim();
+    const fine = Number(qs('ruleFine').value) || 0;
+    const id = name.toUpperCase().replace(/\s+/g,'_');
+    const exists = rules.find(r=>r.id===id);
+    if(exists){ exists.name = name; exists.fine = fine; }
+    else rules.push({id, name, fine});
+    saveAll(); populateRulesSelect(); qs('ruleForm').reset();
+  };
+  qs('resetRules').onclick = ()=>{
+    if(!confirm('Reset to default rules?')) return;
+    rules = defaultRules.slice(); saveAll(); populateRulesSelect();
+  };
+});
+
+
+//citizen.html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Citizen Portal — Check E-Challan</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header><h1>Citizen Portal — Check E‑Challan</h1></header>
+  <main style="padding:24px;max-width:900px;margin:0 auto">
+    <div class="card">
+      <h2>Find Challans by Vehicle Number</h2>
+      <input id="vehInput" placeholder="Enter vehicle number (e.g. TN52AB1234)">
+      <div class="row">
+        <button id="findBtn">Find</button>
+        <button id="showAllBtn">Show All Records</button>
+        <button id="clearBtn">Clear</button>
+      </div>
+      <p><small>For demo, this portal reads data stored locally in your browser by the Officer app. To simulate SMS/WhatsApp, click the message buttons on each challan.</small></p>
+    </div>
+
+    <div id="listArea"></div>
+  </main>
+
+  <footer style="padding:10px;text-align:center"><small>Demo mode: Payments are simulated. No real payment is processed.</small></footer>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+  <script src="citizen.js"></script>
+</body>
+</html>
+
+
+//citizen.js
+// Citizen portal script (reads 'records' key)
+function qs(id){ return document.getElementById(id); }
+
+function loadRecords(){
+  try{
+    const rec = JSON.parse(localStorage.getItem('records') || '[]');
+    return rec;
+  }catch(e){ return []; }
+}
+
+function generateQRCodeForData(data, size=140){
+  try{
+    const qr = new QRious({value: data, size: size});
+    return qr.toDataURL();
+  }catch(e){
+    return null;
+  }
+}
+
+function renderList(list){
+  const area = qs('listArea');
+  area.innerHTML = '';
+  if(list.length === 0){ area.innerHTML = '<div class="card"><small>No challans found.</small></div>'; return; }
+  list.slice().reverse().forEach(r=>{
+    const div = document.createElement('div'); div.className='card';
+    div.style.marginBottom='12px';
+    const qrData = JSON.stringify({id:r.challanId, vehicle:r.vehicle, fine:r.fine, paid:r.paid, date:r.datetime});
+    const qrImg = generateQRCodeForData(qrData);
+    const qrHtml = qrImg? `<div style="text-align:center;margin-top:8px"><img src="${qrImg}" alt="QR" style="max-width:140px"></div>` : '';
+    div.innerHTML = `
+      <h3>Challan: ${r.challanId} ${r.paid?'<small style="color:green">[PAID]</small>':''}</h3>
+      <p><strong>Vehicle:</strong> ${r.vehicle}</p>
+      <p><strong>Violation:</strong> ${r.violationName} (₹${r.fine})</p>
+      <p><strong>Date:</strong> ${new Date(r.datetime).toLocaleString()}</p>
+      <p><strong>Location:</strong> ${r.location || '-'}</p>
+      ${qrHtml}
+      <div class="row">
+        <button class="payBtn">${r.paid? 'Already Paid' : 'Pay Now (Demo)'}</button>
+        <button class="smsBtn">Simulate SMS</button>
+        <button class="waBtn">Open WhatsApp (Prefill)</button>
+        <button class="viewBtn">View Challan</button>
+      </div>
+    `;
+    div.querySelector('.payBtn').onclick = ()=> simulatePay(r.challanId);
+    div.querySelector('.smsBtn').onclick = ()=> simulateSMS(r);
+    div.querySelector('.waBtn').onclick = ()=> openWhatsApp(r);
+    div.querySelector('.viewBtn').onclick = ()=> viewPrint(r);
+    area.appendChild(div);
+  });
+}
+
+function simulatePay(challanId){
+  let records = loadRecords();
+  const idx = records.findIndex(x=> x.challanId === challanId);
+  if(idx === -1) return alert('Record not found');
+  if(records[idx].paid) return alert('This challan is already marked paid.');
+  const ok = confirm('This is a demo payment. Click OK to simulate successful payment.');
+  if(!ok) return;
+  records[idx].paid = true;
+  records[idx].payment = {
+    method: 'Demo UPI',
+    txId: 'TX'+Date.now().toString(36).toUpperCase().slice(-8),
+    paidAt: new Date().toISOString()
+  };
+  localStorage.setItem('records', JSON.stringify(records));
+  alert('Payment successful (demo). Receipt will be shown.');
+  viewPrint(records[idx], true);
+  renderList(loadRecords());
+}
+
+function simulateSMS(r){
+  const sms = `Your vehicle ${r.vehicle} has an e-challan ${r.challanId} for ${r.violationName}. Fine: ₹${r.fine}. Pay at: (demo) Citizen Portal.`;
+  prompt('SMS text (copy to clipboard):', sms);
+}
+
+function openWhatsApp(r){
+  const sms = `E-Challan ${r.challanId}\nVehicle: ${r.vehicle}\nViolation: ${r.violationName} (₹${r.fine})\nDate: ${new Date(r.datetime).toLocaleString()}\nPay at: (demo)`;
+  const url = 'https://wa.me/?text=' + encodeURIComponent(sms);
+  window.open(url, '_blank');
+}
+
+function viewPrint(r, autoPrint=false){
+  const w = window.open('', '_blank', 'width=800,height=700');
+  const paidHtml = r.paid? `<p><strong style="color:green">Paid via: ${r.payment.method} — TX ${r.payment.txId}</strong></p>` : '';
+  const qrData = JSON.stringify({id:r.challanId, vehicle:r.vehicle, fine:r.fine, paid:r.paid, date:r.datetime});
+  const qrImg = generateQRCodeForData(qrData);
+  const qrHtml = qrImg? `<div style="text-align:center;margin-top:8px"><img src="${qrImg}" alt="QR" style="max-width:140px"></div>` : '';
+  w.document.write(`
+    <html><head><title>Challan ${r.challanId}</title><link rel="stylesheet" href="styles.css"></head><body>
+    <div id="challan" class="card" style="max-width:700px;margin:20px auto">
+      <h2>E-Challan</h2>
+      <p><strong>Challan ID:</strong> ${r.challanId}</p>
+      <p><strong>Vehicle:</strong> ${r.vehicle}</p>
+      <p><strong>Violation:</strong> ${r.violationName} (₹${r.fine})</p>
+      <p><strong>Date & Time:</strong> ${new Date(r.datetime).toLocaleString()}</p>
+      <p><strong>Location:</strong> ${r.location || '-'}</p>
+      ${paidHtml}
+      ${qrHtml}
+    </div>
+    <div style="text-align:center"><button onclick="window.print()">Print / Save as PDF</button></div>
+    </body></html>
+  `);
+  if(autoPrint){
+    setTimeout(()=> w.print(), 600);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  qs('findBtn').onclick = ()=>{
+    const q = qs('vehInput').value.trim().toUpperCase();
+    const rec = loadRecords();
+    if(!q) return renderList(rec);
+    const out = rec.filter(r=> r.vehicle.toUpperCase().includes(q));
+    renderList(out);
+  };
+  qs('showAllBtn').onclick = ()=> renderList(loadRecords());
+  qs('clearBtn').onclick = ()=>{ qs('vehInput').value=''; qs('listArea').innerHTML=''; };
+  renderList(loadRecords());
+});
+
+
+//index.html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>E-Challan Generator & Traffic Violation Tracker</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>E‑Challan Generator & Traffic Violation Tracker</h1>
+    <div id="userInfo"></div>
+  </header>
+
+  <main>
+    <section id="loginSection" class="card">
+      <h2>Officer Login</h2>
+      <p>Use preset officers: <strong>officer1 / pass1</strong> or <strong>admin / adminpass</strong></p>
+      <input id="username" placeholder="Username" autocomplete="off">
+      <input id="password" type="password" placeholder="Password">
+      <div class="row">
+        <button id="loginBtn">Login</button>
+        <button id="logoutBtn" style="display:none">Logout</button>
+      </div>
+      <p>Public / Citizen? <a href="citizen.html" target="_blank">Open Citizen Portal</a></p>
+    </section>
+
+    <section id="controls" style="display:none">
+      <div class="card">
+        <h2>Create Violation & Generate Challan</h2>
+        <form id="violationForm">
+          <label>Vehicle Number<input id="vehicle" required></label>
+          <label>Violation
+            <select id="violationType"></select>
+          </label>
+          <label>Location<input id="location"></label>
+          <label>Date & Time<input id="datetime" type="datetime-local"></label>
+          <div class="row">
+            <button type="submit">Generate Challan</button>
+            <button id="clearForm" type="button">Clear</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Search / Records</h2>
+        <input id="searchInput" placeholder="Search by vehicle number or challan id">
+        <div class="row">
+          <button id="searchBtn">Search</button>
+          <button id="showAllBtn">Show All</button>
+          <button id="exportCsvBtn">Export CSV</button>
+        </div>
+        <div id="records"></div>
+      </div>
+
+      <div id="adminPanel" class="card" style="display:none">
+        <h2>Admin: Violation Rules</h2>
+        <form id="ruleForm">
+          <input id="ruleName" placeholder="Violation name" required>
+          <input id="ruleFine" placeholder="Fine amount" required type="number" min="0">
+          <div class="row">
+            <button type="submit">Add / Update Rule</button>
+            <button id="resetRules" type="button">Reset Default Rules</button>
+          </div>
+        </form>
+        <ul id="ruleList"></ul>
+      </div>
+    </section>
+
+    <section id="printSection" style="display:none">
+      <div class="card" id="challanCard" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <footer>
+    <small>Static app — stores data in your browser (localStorage). No server required.</small>
+  </footer>
+
+  <!-- QR library (CDN). If offline, QR won't render; app works otherwise. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
+
+
+//README.txt
+E-Challan Generator & Traffic Violation Tracker (Final)
+------------------------------------------------------
+This final version fixes the citizen portal sync issue and adds QR codes on challans.
+
+Key fixes/features:
+- Single shared localStorage key: 'records' (both officer and citizen read/write this)
+- Citizen portal now matches vehicle numbers case-insensitively and shows results
+- "Pay Now (Demo)" marks challan paid and saves payment info
+- QR code (scannable) appears on challan and printable receipt (uses QRious CDN)
+- Printable challan/receipt (Print -> Save as PDF)
+
+How to run:
+1. Unzip the project folder.
+2. Open 'index.html' (Officer/Admin) in your browser. Login as officer1 / pass1.
+3. Open 'citizen.html' in another tab or send to someone.
+4. Create a challan for a vehicle (e.g., TN52AB1234), then search on citizen portal.
+5. Click 'Pay Now (Demo)' to mark as paid and see receipt + QR code.
+
+Note: QR rendering requires internet (CDN). The core app works offline but QR images require CDN access.
+
