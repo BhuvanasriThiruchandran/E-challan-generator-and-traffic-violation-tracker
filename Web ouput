@@ -439,6 +439,36 @@ document.addEventListener('DOMContentLoaded', ()=>{
 </html>
 
 
+//styles.css
+:root{
+  --bg:#f5f7fb; --card:#ffffff; --accent:#0b5fff;
+}
+*{box-sizing:border-box;font-family:Inter,system-ui,Arial,Helvetica,sans-serif}
+body{margin:0;background:var(--bg);color:#0b2545;min-height:100vh;display:flex;flex-direction:column}
+header{background:linear-gradient(90deg,#0b5fff33,#00bfa633);padding:18px 24px;display:flex;align-items:center;justify-content:space-between}
+header h1{margin:0;font-size:18px}
+main{flex:1;padding:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px}
+.card{background:var(--card);padding:16px;border-radius:12px;box-shadow:0 6px 18px rgba(11,37,69,0.06)}
+input,select,button{font-size:15px;padding:10px;border-radius:8px;border:1px solid #d9e2f0}
+label{display:block;margin-bottom:8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+button{background:var(--accent);color:white;border:none;cursor:pointer}
+button[disabled]{opacity:0.6;cursor:not-allowed}
+#records{margin-top:12px}
+.record{padding:10px;border-radius:8px;border:1px solid #eef3ff;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.record small{display:block;color:#4b5563}
+.challan-id{font-weight:700}
+#challanCard{max-width:640px;margin:20px auto;border:1px dashed #cbd5e1;padding:12px}
+.qr-wrap{margin-top:10px;text-align:center}
+footer{padding:10px;text-align:center;font-size:13px;color:#334155}
+@media print{
+  body *{visibility:hidden}
+  #challanCard, #challanCard *{visibility:visible}
+  #challanCard{position:fixed;left:0;top:0;width:100%}
+}
+
+
+
 //README.txt
 E-Challan Generator & Traffic Violation Tracker (Final)
 ------------------------------------------------------
