@@ -1,0 +1,235 @@
+//Challan.java
+public class Challan {
+    int challanId;
+    User user;
+    Violation violation;
+    boolean paid;
+
+    public Challan(int challanId, User user, Violation violation) {
+        this.challanId = challanId;
+        this.user = user;
+        this.violation = violation;
+        this.paid = false;
+    }
+
+    @Override
+    public String toString() {
+        return "Challan ID: " + challanId +
+               " | Vehicle: " + user.vehicleNumber +
+               " | Violation: " + violation.getType() +
+               " | Fine: ₹" + violation.getFine() +
+               " | Paid: " + (paid ? "Yes" : "No");
+    }
+}
+
+
+//DatabaseManager.java
+import java.util.*;
+
+public class DatabaseManager {
+
+    List<User> users = new ArrayList<>();
+    List<Challan> challans = new ArrayList<>();
+    int challanCounter = 1000;
+
+    // ----- Register user -----
+    public void registerUser(Scanner sc) {
+        System.out.print("Enter Name: ");
+        String name = sc.nextLine();
+        System.out.print("Enter Vehicle Number: ");
+        String vehicle = sc.nextLine();
+        System.out.print("Enter Email: ");
+        String email = sc.nextLine();
+        System.out.print("Enter Phone: ");
+        String phone = sc.nextLine();
+
+        users.add(new User(name, vehicle, email, phone));
+        System.out.println("User Registered Successfully!");
+    }
+
+    // ----- Record violation -----
+    public void recordViolation(Scanner sc) {
+        System.out.print("Enter Vehicle Number: ");
+        String vehicle = sc.nextLine();
+
+        User user = users.stream()
+                .filter(u -> u.vehicleNumber.equalsIgnoreCase(vehicle))
+                .findFirst().orElse(null);
+
+        if (user == null) {
+            System.out.println("Vehicle not registered!");
+            return;
+        }
+
+        System.out.print("Enter Violation Type (signal jumping/no helmet/overspeeding): ");
+        String type = sc.nextLine();
+
+        Violation violation = new Violation(type);
+        Challan challan = new Challan(challanCounter++, user, violation);
+        challans.add(challan);
+
+        System.out.println("Challan Generated Successfully!");
+        System.out.println(challan);
+    }
+
+    // ----- View all challans -----
+    public void viewChallans() {
+        if (challans.isEmpty()) {
+            System.out.println("No challans found!");
+            return;
+        }
+        challans.forEach(System.out::println);
+    }
+}
+
+
+//NotificationService.java
+public class NotificationService {
+
+    public static void sendNotification(User user, String message) {
+        System.out.println("Notification sent to " + user.phone + ": " + message);
+    }
+}
+
+
+//PaymentService.java
+
+import java.util.Scanner;
+
+public class PaymentService {
+
+    public void payChallan(DatabaseManager db, Scanner sc) {
+        System.out.print("Enter Challan ID to Pay: ");
+        int id = sc.nextInt();
+
+        for (Challan c : db.challans) {
+            if (c.challanId == id) {
+                if (c.paid) {
+                    System.out.println("Already Paid!");
+                    return;
+                }
+                System.out.println("Fine: ₹" + c.violation.getFine());
+                System.out.print("Confirm Payment (y/n): ");
+                char ch = sc.next().charAt(0);
+                if (ch == 'y' || ch == 'Y') {
+                    c.paid = true;
+                    System.out.println("Payment Successful!");
+                    NotificationService.sendNotification(c.user, "Your challan " + id + " has been paid.");
+                }
+                return;
+            }
+        }
+        System.out.println("Challan not found!");
+    }
+}
+
+
+//ReportGenerator.java
+public class ReportGenerator {
+    public void generateReport(DatabaseManager db) {
+        long total = db.challans.size();
+        long paid = db.challans.stream().filter(c -> c.paid).count();
+        long unpaid = total - paid;
+
+        System.out.println("\n=== REPORT SUMMARY ===");
+        System.out.println("Total Challans: " + total);
+        System.out.println("Paid Challans: " + paid);
+        System.out.println("Unpaid Challans: " + unpaid);
+    }
+}
+
+
+//User.java
+public class User {
+    String name;
+    String vehicleNumber;
+    String email;
+    String phone;
+
+    public User(String name, String vehicleNumber, String email, String phone) {
+        this.name = name;
+        this.vehicleNumber = vehicleNumber;
+        this.email = email;
+        this.phone = phone;
+    }
+
+    @Override
+    public String toString() {
+        return "Name: " + name + " | Vehicle: " + vehicleNumber +
+               " | Email: " + email + " | Phone: " + phone;
+    }
+}
+
+
+//Violation.java
+public class Violation {
+    String type;
+    double fine;
+
+    public Violation(String type) {
+        this.type = type;
+        this.fine = switch (type.toLowerCase()) {
+            case "signal jumping" -> 500;
+            case "no helmet" -> 300;
+            case "overspeeding" -> 700;
+            default -> 200;
+        };
+    }
+
+    public String getType()  { return type; }
+    public double getFine()  { return fine; }
+}
+
+
+//Main.java
+import java.util.*;
+
+public class Main {
+
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+        DatabaseManager db = new DatabaseManager();
+        PaymentService payment = new PaymentService();
+        ReportGenerator report = new ReportGenerator();
+
+        System.out.println("=== E-CHALLAN GENERATOR & TRAFFIC VIOLATION TRACKER ===");
+
+        while (true) {
+            System.out.println("\n1. Register User");
+            System.out.println("2. Record Violation");
+            System.out.println("3. View Challans");
+            System.out.println("4. Pay Challan");
+            System.out.println("5. Generate Report");
+            System.out.println("6. Exit");
+            System.out.print("Enter choice: ");
+            int ch = sc.nextInt();
+            sc.nextLine();
+
+            switch (ch) {
+                case 1 ->
+                    db.registerUser(sc);
+                case 2 ->
+                    db.recordViolation(sc);
+                case 3 ->
+                    db.viewChallans();
+                case 4 ->
+                    payment.payChallan(db, sc);
+                case 5 ->
+                    report.generateReport(db);
+                case 6 -> {
+                    System.out.println("Goodbye!");
+                    return;
+                }
+                default ->
+                    System.out.println("Invalid choice!");
+            }
+        }
+    }
+}
+
+
+//TODO.md
+- [x] Update DatabaseManager.java: Remove Scanner instance and modify methods to accept Scanner parameter
+- [x] Update PaymentService.java: Remove Scanner instance and modify methods to accept Scanner parameter
+- [x] Update Main.java: Pass Scanner to method calls in DatabaseManager and PaymentService
+- [x] Compile and run the program to verify the fix
